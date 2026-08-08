@@ -4,7 +4,7 @@ license="All Rights Reserved"
 
 [[mods]]
 modId="baritonewebbridge"
-version="2.5.2"
+version="2.5.3"
 displayName="Baritone Web Bridge"
 displayTest="IGNORE_ALL_VERSION"
 description='''

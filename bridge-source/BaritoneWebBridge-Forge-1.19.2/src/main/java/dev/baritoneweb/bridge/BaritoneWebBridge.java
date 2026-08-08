@@ -62,7 +62,7 @@ import java.awt.image.BufferedImage;
 @Mod(BaritoneWebBridge.MOD_ID)
 public final class BaritoneWebBridge {
     public static final String MOD_ID = "baritonewebbridge";
-    private static final String VERSION = "2.5.2";
+    private static final String VERSION = "2.5.3";
     private static final int FIRST_PORT = 8765;
     private static final int LAST_PORT = 8795;
     private static final int MAX_BODY_BYTES = 16 * 1024;
@@ -90,6 +90,7 @@ public final class BaritoneWebBridge {
     private List<Path> modJarPaths = List.of();
     private String iconAssetFingerprint = "";
     private Path iconDiskCacheDir;
+    private Path catalogCacheFile;
     private final Map<String, Optional<byte[]>> itemIconCache = new ConcurrentHashMap<>();
     private final Map<String, byte[]> renderedIconCache = Collections.synchronizedMap(new LinkedHashMap<>(256, 0.75f, true) {
         @Override protected boolean removeEldestEntry(Map.Entry<String, byte[]> eldest) { return size() > 512; }
@@ -119,6 +120,7 @@ public final class BaritoneWebBridge {
         iconAssetFingerprint = computeAssetFingerprint(gameDir, modJarPaths);
         iconDiskCacheDir = gameDir.resolve("cache").resolve("baritone-web-bridge").resolve("item-icons")
                 .resolve(iconAssetFingerprint.substring(0, 16));
+        catalogCacheFile = gameDir.resolve("cache").resolve("baritone-web-bridge").resolve("catalog-" + iconAssetFingerprint.substring(0, 16) + ".json");
         try { Files.createDirectories(iconDiskCacheDir); }
         catch (IOException error) { DebugLog.error("ITEM-ICON", "Could not create rendered icon cache directory", error); }
         DebugLog.info("ITEM-ICON", "Rendered icon cache=" + iconDiskCacheDir + ", fingerprint=" + iconAssetFingerprint.substring(0, 16));
@@ -133,6 +135,7 @@ public final class BaritoneWebBridge {
             server.createContext("/api/inventory", this::handleInventory);
             server.createContext("/api/inventory/action", this::handleInventoryAction);
             server.createContext("/api/item-icon", this::handleItemIcon);
+            server.createContext("/api/catalog", this::handleCatalog);
             server.createContext("/api/cache", this::handleCache);
             server.createContext("/api/cache/open", this::handleCacheOpen);
             server.createContext("/api/cache/clear", this::handleCacheClear);
@@ -264,6 +267,36 @@ public final class BaritoneWebBridge {
         if (!prepare(exchange, "GET", requestId)) return;
         respond(exchange, 200, "{\"ok\":true,\"path\":\"" + jsonEscape(iconDiskCacheDir.toAbsolutePath().toString())
                 + "\",\"bytes\":" + cacheSize(iconDiskCacheDir) + "}", requestId);
+    }
+
+    private void handleCatalog(HttpExchange exchange) throws IOException {
+        long requestId = REQUEST_SEQUENCE.incrementAndGet();
+        if (!prepare(exchange, "GET", requestId)) return;
+        try {
+            String json;
+            if (Files.isRegularFile(catalogCacheFile)) json = Files.readString(catalogCacheFile, StandardCharsets.UTF_8);
+            else {
+                json = buildCatalogJson();
+                Files.createDirectories(catalogCacheFile.getParent());
+                Files.writeString(catalogCacheFile, json, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            }
+            respond(exchange, 200, json, requestId);
+        } catch (Throwable error) { fail(exchange, 503, "Could not build registry catalog: " + rootMessage(error), requestId); }
+    }
+
+    private String buildCatalogJson() throws Exception {
+        Class<?> registries = Class.forName("net.minecraftforge.registries.ForgeRegistries");
+        Object blocks = registries.getField("BLOCKS").get(null);
+        Object items = registries.getField("ITEMS").get(null);
+        Method getKeys = Class.forName("net.minecraftforge.registries.IForgeRegistry").getMethod("getKeys");
+        @SuppressWarnings("unchecked") Set<Object> blockKeys = (Set<Object>) getKeys.invoke(blocks);
+        @SuppressWarnings("unchecked") Set<Object> itemKeys = (Set<Object>) getKeys.invoke(items);
+        List<String> blockIds = blockKeys.stream().map(String::valueOf).sorted().toList();
+        Set<String> blockSet = Set.copyOf(blockIds);
+        List<String> itemIds = itemKeys.stream().map(String::valueOf).filter(id -> !blockSet.contains(id)).sorted().toList();
+        return "{\"ok\":true,\"fingerprint\":\"" + iconAssetFingerprint.substring(0, 16) + "\",\"blocks\":["
+                + blockIds.stream().map(id -> "\"" + jsonEscape(id) + "\"").collect(java.util.stream.Collectors.joining(","))
+                + "],\"items\":[" + itemIds.stream().map(id -> "\"" + jsonEscape(id) + "\"").collect(java.util.stream.Collectors.joining(",")) + "]}";
     }
 
     private void handleCacheOpen(HttpExchange exchange) throws IOException {
