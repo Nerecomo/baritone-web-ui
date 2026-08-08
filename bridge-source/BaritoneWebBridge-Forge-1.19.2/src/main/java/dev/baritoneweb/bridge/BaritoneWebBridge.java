@@ -62,7 +62,7 @@ import java.awt.image.BufferedImage;
 @Mod(BaritoneWebBridge.MOD_ID)
 public final class BaritoneWebBridge {
     public static final String MOD_ID = "baritonewebbridge";
-    private static final String VERSION = "2.5.3";
+    private static final String VERSION = "2.5.4";
     private static final int FIRST_PORT = 8765;
     private static final int LAST_PORT = 8795;
     private static final int MAX_BODY_BYTES = 16 * 1024;
@@ -107,8 +107,10 @@ public final class BaritoneWebBridge {
     private HttpServer server;
     private int port = -1;
     private ExecutorService commandExecutor;
+    private ExecutorService iconPrewarmExecutor;
     private ScheduledExecutorService quotaExecutor;
     private volatile QuotaSession quotaSession;
+    private final AtomicBoolean iconPrewarmStarted = new AtomicBoolean();
 
     public BaritoneWebBridge() {
         // Forge loads one-sided mods on both physical sides; on a dedicated server this bridge must do nothing.
@@ -153,6 +155,11 @@ public final class BaritoneWebBridge {
                 thread.setUncaughtExceptionHandler((ignored, error) -> DebugLog.error("COMMAND", "Uncaught command worker error", error));
                 return thread;
             });
+            iconPrewarmExecutor = Executors.newSingleThreadExecutor(runnable -> {
+                Thread thread = new Thread(runnable, "baritone-web-icon-prewarm");
+                thread.setDaemon(true);
+                return thread;
+            });
             quotaExecutor = Executors.newSingleThreadScheduledExecutor(runnable -> {
                 Thread thread = new Thread(runnable, "baritone-web-quota");
                 thread.setDaemon(true);
@@ -192,6 +199,7 @@ public final class BaritoneWebBridge {
         DebugLog.info("STOP", "Stopping bridge");
         if (server != null) server.stop(0);
         if (commandExecutor != null) commandExecutor.shutdownNow();
+        if (iconPrewarmExecutor != null) iconPrewarmExecutor.shutdownNow();
         if (quotaExecutor != null) quotaExecutor.shutdownNow();
         DebugLog.stop();
     }
@@ -281,7 +289,36 @@ public final class BaritoneWebBridge {
                 Files.writeString(catalogCacheFile, json, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
             }
             respond(exchange, 200, json, requestId);
+            startIconPrewarm();
         } catch (Throwable error) { fail(exchange, 503, "Could not build registry catalog: " + rootMessage(error), requestId); }
+    }
+
+    private void startIconPrewarm() {
+        if (iconPrewarmExecutor == null || !iconPrewarmStarted.compareAndSet(false, true)) return;
+        iconPrewarmExecutor.execute(() -> {
+            int rendered = 0, failed = 0;
+            try {
+                Class<?> registries = Class.forName("net.minecraftforge.registries.ForgeRegistries");
+                Object items = registries.getField("ITEMS").get(null);
+                Method getKeys = Class.forName("net.minecraftforge.registries.IForgeRegistry").getMethod("getKeys");
+                @SuppressWarnings("unchecked") Set<Object> keys = (Set<Object>) getKeys.invoke(items);
+                List<String> ids = keys.stream().map(String::valueOf).sorted().toList();
+                DebugLog.info("ITEM-PREWARM", "Starting background cache for " + ids.size() + " registered items");
+                for (String id : ids) {
+                    if (Thread.currentThread().isInterrupted()) break;
+                    try {
+                        Object stack = Mc.stackForItemId(id);
+                        if (stack == null || Mc.itemStackEmpty(stack)) { failed++; continue; }
+                        String key = registerIconStack(stack, id);
+                        renderedIcon(key, id, 0);
+                        rendered++;
+                        Thread.sleep(12L);
+                    } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); break; }
+                    catch (Throwable ignored) { failed++; }
+                }
+                DebugLog.info("ITEM-PREWARM", "Background cache finished: rendered=" + rendered + ", skipped=" + failed);
+            } catch (Throwable error) { DebugLog.error("ITEM-PREWARM", "Background cache failed", error); }
+        });
     }
 
     private String buildCatalogJson() throws Exception {
@@ -1363,6 +1400,16 @@ public final class BaritoneWebBridge {
             } catch (Throwable ignored) {
                 return null;
             }
+        }
+
+        static Object stackForItemId(String itemId) {
+            try {
+                Object item = itemById(itemId);
+                if (item == null) return null;
+                Class<?> itemLike = Class.forName("net.minecraft.world.level.ItemLike");
+                Class<?> stackClass = Class.forName("net.minecraft.world.item.ItemStack");
+                return stackClass.getConstructor(itemLike).newInstance(item);
+            } catch (Throwable ignored) { return null; }
         }
 
         static Object gameMode() {
