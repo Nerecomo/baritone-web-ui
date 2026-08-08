@@ -1,0 +1,46 @@
+plugins {
+    id 'eclipse'
+    id 'maven-publish'
+    id 'net.minecraftforge.gradle' version '5.1.+'
+}
+
+version = '2.5.2'
+group = 'dev.baritoneweb'
+archivesBaseName = 'baritone-web-bridge-forge'
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+minecraft {
+    mappings channel: 'official', version: '1.19.2'
+
+    runs {
+        client {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+
+            mods {
+                baritonewebbridge {
+                    source sourceSets.main
+                }
+            }
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    minecraft 'net.minecraftforge:forge:1.19.2-43.5.0'
+
+    // Baritone is intentionally NOT a compile dependency here.
+    // The bridge uses reflection for baritone.api.* so compileJava does not need Baritone.
+    // At runtime use the Forge API build of Baritone for Minecraft 1.19.2.
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+

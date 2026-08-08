@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090b0c">
+  <title>Baritone Control — Web Console</title>
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="noise"></div>
+  <aside class="sidebar">
+    <a class="brand" href="#" aria-label="Baritone Control">
+      <span class="brand-mark">B</span>
+      <span><b>BARITONE</b><small>WEB CONTROL</small></span>
+    </a>
+
+    <nav id="commandNav" aria-label="Команды Baritone"></nav>
+
+    <div class="sidebar-bottom">
+      <div class="sidebar-tools">
+        <button class="nav-item" data-action="settings"><span class="nav-icon">⌁</span><span>Настройки</span></button>
+        <button class="nav-item error-log-nav" id="errorLogButton"><span class="nav-icon">!</span><span>Лог ошибок</span><b id="errorLogCount">0</b></button>
+      </div>
+      <div class="connection-card">
+        <span class="status-dot"></span>
+        <div><small>MOD BRIDGE</small><strong id="connectionText">Ожидает подключения</strong></div>
+      </div>
+    </div>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <button class="mobile-menu" id="menuButton" aria-label="Открыть меню">☰</button>
+      <div class="eyebrow">CONTROL PANEL / <span id="breadcrumb">MINE</span></div>
+      <div class="top-actions">
+        <button class="icon-button control-button resume-control" id="resumeButton" title="Продолжить выполнение задачи Baritone" disabled><span>▶</span> ПРОДОЛЖИТЬ</button>
+        <button class="icon-button control-button pause-control" id="pauseButton" title="Поставить Baritone на паузу"><span>Ⅱ</span> ПАУЗА</button>
+        <button class="danger-button control-button stop-control" id="stopButton" title="Полностью отменить текущую задачу"><span>■</span> СТОП</button>
+      </div>
+    </header>
+    <div class="instances-panel top-instances">
+      <div class="instances-heading"><span>ИГРОКИ</span><b id="instanceCount">0</b></div>
+      <div class="instance-list" id="instanceList"><div class="instance-empty">Запущенные клиенты не найдены</div></div>
+    </div>
+
+    <section class="workspace">
+      <div class="hero">
+        <div>
+          <h1 id="pageTitle">Добыча ресурсов</h1>
+          <p id="pageDescription">Соберите команду добычи из готовых пресетов или укажите блоки вручную.</p>
+        </div>
+        <div class="live-badge"><span></span> COMMAND READY</div>
+      </div>
+
+      <div class="command-layout">
+        <section class="panel command-panel">
+          <div class="panel-heading">
+            <div><span class="label">COMMAND BUILDER</span><h2 id="builderTitle">Выберите блоки</h2></div>
+            <div class="panel-actions"><button class="text-button undo-button" id="undoButton" type="button" disabled>↶ Отменить</button><button class="text-button" id="clearButton" type="button">Очистить</button></div>
+          </div>
+          <div id="dynamicForm" class="dynamic-form"></div>
+          <div id="minePresets" class="preset-grid"></div>
+        </section>
+
+        <aside class="panel preview-panel">
+          <span class="label">OUTPUT</span>
+          <h2>Команда</h2>
+          <div class="terminal"><span class="prompt">›</span><code id="commandOutput">#mine</code><button id="copyButton" title="Копировать">⧉</button></div>
+          <p class="hint" id="commandHint">Выберите один или несколько блоков. Baritone найдёт ближайшие цели и построит маршрут.</p>
+          <button class="run-button" id="runButton"><span>▶</span><span>ВЫПОЛНИТЬ</span><small>CTRL ↵</small></button>
+          <div class="api-note"><div class="api-note-row quota-note" id="apiQuotaNote"><span aria-label="Важно">&#33;</span><p>Если в полях количества указаны цифры, отсчёт добытого начинается заново при каждом нажатии «Выполнить».</p></div><div class="api-note-row bridge-note"><span>API</span><p id="apiDescription">Команда будет отправлена в локальный bridge мода. Пока bridge недоступен, работает безопасный режим предпросмотра.</p></div></div>
+        </aside>
+      </div>
+
+      <section class="recent-section">
+        <div class="section-title"><div><span class="label">SESSION</span><h2>Последние команды</h2></div><button class="text-button" id="clearHistory">Очистить журнал</button></div>
+        <div class="history" id="history"></div>
+      </section>
+    </section>
+  </main>
+
+  <dialog id="settingsDialog" class="settings-dialog">
+    <form method="dialog">
+      <div class="dialog-head"><div><span class="label">CONTROL CENTER</span><h2>Настройки</h2></div><button class="dialog-close" value="cancel">×</button></div>
+      <div class="settings-tabs" role="tablist"><button class="active" type="button" role="tab" data-settings-tab="baritone">Настройки Baritone</button><button type="button" role="tab" data-settings-tab="site">Настройки сайта</button><button type="button" role="tab" data-settings-tab="bridge">Настройки Bridge</button></div>
+      <section class="settings-pane active" data-settings-pane="baritone">
+        <p class="settings-description">Полный каталог Baritone 1.15.0. Изменённые параметры будут применены ко всем запущенным аккаунтам.</p>
+        <div class="settings-catalog-toolbar"><input id="baritoneSettingsSearch" type="search" placeholder="Поиск по названию или описанию"><select id="baritoneSettingsCategory"><option value="all">Все категории</option></select><div class="settings-scope"><button class="active" type="button" data-settings-scope="basic">Основные</button><button type="button" data-settings-scope="all">Все</button></div></div>
+        <div class="settings-config-actions"><button type="button" id="readLiveBaritoneSettings">Считать с выбранного аккаунта</button><button type="button" id="loadBaritoneWebConfig">Загрузить веб-конфиг</button><button type="button" id="saveBaritoneWebConfig">Сохранить веб-конфиг</button></div>
+        <div class="settings-config-path" id="baritoneConfigPath">Конфиг ещё не сохранён</div>
+        <div class="settings-catalog-meta"><span id="baritoneSettingsCount"></span><button class="text-button" id="resetChangedSettings" type="button">Сбросить изменения</button></div>
+        <div class="baritone-settings-catalog" id="baritoneSettingsCatalog"></div>
+        <div class="settings-apply-row"><div class="settings-player-target"><span id="baritoneSettingsTargets">Аккаунтов найдено: 0</span><select id="baritoneSettingsPlayer" aria-label="Игрок для применения настроек"></select></div><div class="settings-apply-buttons"><button class="run-button secondary-run-button" id="applyPlayerBaritoneSettings" type="button">ПРИМЕНИТЬ ДЛЯ ИГРОКА</button><button class="run-button" id="applyBaritoneSettings" type="button">ПРИМЕНИТЬ ДЛЯ ВСЕХ</button></div></div>
+      </section>
+      <section class="settings-pane site-settings-pane" data-settings-pane="site" hidden>
+        <p class="settings-description">Персональная настройка интерфейса хранится только в этом браузере и не изменяет Baritone или Bridge.</p>
+        <div class="site-settings-scroll">
+          <fieldset class="site-settings-group"><legend>Внешний вид</legend><div class="site-settings-grid">
+            <label>Масштаб интерфейса<select id="siteUiScale"><option value="1">100%</option><option value="1.1">110%</option><option value="1.2">120%</option><option value="1.3">130%</option></select></label>
+            <label>Плотность интерфейса<select id="siteDensity"><option value="comfortable">Обычная</option><option value="compact">Компактная</option><option value="spacious">Просторная</option></select></label>
+            <label>Ширина навигации<input id="siteSidebarWidth" type="range" min="190" max="310" step="10"><output id="siteSidebarWidthValue"></output></label>
+            <label>Скругление элементов<select id="siteCorners"><option value="4">Минимальное</option><option value="10">Среднее</option><option value="16">Крупное</option></select></label>
+            <label>Цвет акцента<input id="siteAccent" type="color"></label>
+          </div><div class="site-toggle-grid">
+            <label><input id="siteNoise" type="checkbox"> Текстура фона</label><label><input id="siteAnimations" type="checkbox"> Анимации интерфейса</label><label><input id="siteCompactPlayers" type="checkbox"> Компактные карточки игроков</label>
+          </div></fieldset>
+          <fieldset class="site-settings-group"><legend>Содержимое страницы</legend><div class="site-toggle-grid">
+            <label><input id="siteShowHints" type="checkbox"> Показывать пояснения к командам</label><label><input id="siteShowApiNotes" type="checkbox"> Показывать примечания API</label><label><input id="siteShowHistory" type="checkbox"> Показывать журнал команд</label><label><input id="siteShowLiveBadge" type="checkbox"> Показывать статус готовности</label>
+          </div><div class="site-settings-grid"><label>Количество строк журнала<select id="siteHistoryLimit"><option value="4">4</option><option value="8">8</option><option value="12">12</option><option value="20">20</option></select></label></div></fieldset>
+          <fieldset class="site-settings-group"><legend>Поведение интерфейса</legend><div class="site-settings-grid">
+            <label>Стартовая функция<select id="siteStartCommand"><option value="goto">Goto</option><option value="follow">Follow</option><option value="mine">Mine</option><option value="explore">Explore</option><option value="farm">Farm</option><option value="build">Build</option><option value="find">Find</option><option value="surface">Surface</option></select></label>
+          </div><div class="site-toggle-grid"><label><input id="siteRememberCommand" type="checkbox"> Запоминать последнюю функцию</label><label><input id="siteConfirmRun" type="checkbox"> Подтверждать отправку команды</label><label><input id="siteConfirmClear" type="checkbox"> Подтверждать очистку формы</label><label><input id="siteShortcuts" type="checkbox"> Разрешить горячие клавиши</label></div></fieldset>
+        </div>
+        <div class="site-settings-actions"><button class="text-button" id="resetSiteSettings" type="button">Сбросить настройки сайта</button><button class="run-button" id="saveSiteSettings" type="button">СОХРАНИТЬ И ПРИМЕНИТЬ</button></div>
+      </section>
+      <section class="settings-pane" data-settings-pane="bridge" hidden>
+        <label>URL локального API<input id="apiUrl" type="url" placeholder="http://127.0.0.1:8765/api"></label>
+        <label>Префикс команд<input id="commandPrefix" type="text" value="#" maxlength="3"></label>
+        <p>Сайт сканирует локальные Bridge начиная с указанного порта и автоматически находит запущенные аккаунты.</p>
+        <button class="run-button" id="saveSettings" type="button">СОХРАНИТЬ BRIDGE</button>
+      </section>
+    </form>
+  </dialog>
+
+  <dialog id="blockPickerDialog" class="block-picker-dialog">
+    <div class="block-picker-shell">
+      <div class="block-picker-head">
+        <div><span class="label">UNIVERSAL BLOCK IDS</span><h2>Выбор блоков</h2></div>
+        <button class="dialog-close" id="closeBlockPicker" type="button" aria-label="Закрыть">×</button>
+      </div>
+      <div class="block-search-wrap">
+        <span>⌕</span>
+        <input id="blockSearch" type="search" placeholder="minecraft:diamond_ore или modid:block_name" autocomplete="off">
+      </div>
+      <div class="block-picker-meta"><span id="blockSearchCount"></span><span id="blockSelectedCount"></span></div>
+      <div id="blockCatalog" class="block-catalog"></div>
+      <div class="block-picker-footer">
+        <button class="done-button" id="confirmBlocks" type="button">ГОТОВО <span>✓</span></button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="errorLogDialog" class="error-log-dialog">
+    <div class="error-log-shell">
+      <div class="dialog-head">
+        <div><span class="label">BROWSER DIAGNOSTICS</span><h2>Ошибки сайта</h2></div>
+        <button class="dialog-close" id="closeErrorLog" type="button" aria-label="Закрыть">×</button>
+      </div>
+      <p class="error-log-description">Ошибки интерфейса и запросов к mod-bridge, сохранённые этим браузером.</p>
+      <div class="error-log-toolbar">
+        <button class="text-button" id="copyErrorLog" type="button">Копировать лог</button>
+        <button class="text-button danger-text" id="clearErrorLog" type="button">Очистить</button>
+      </div>
+      <div id="errorLogList" class="error-log-list"></div>
+    </div>
+  </dialog>
+
+  <div id="inventoryWindows" class="inventory-windows" aria-live="polite"></div>
+
+  <div id="toast" role="status" popover="manual"></div>
+  <script src="baritone-settings-1.15.0.js"></script>
+  <script src="baritone-descriptions-ru.js"></script>
+  <script src="app.js?v=251"></script>
+</body>
+</html>

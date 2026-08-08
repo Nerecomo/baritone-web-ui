@@ -1,0 +1,20 @@
+# Build outputs and local tooling
+build/
+manual-build/
+.gradle/
+gradle-cache-local/
+run/
+logs/
+cache/
+
+# Local/editor files
+.idea/
+.vscode/
+*.iml
+*.log
+Thumbs.db
+desktop.ini
+
+# Temporary archives
+*_tmp_*
+tmp/

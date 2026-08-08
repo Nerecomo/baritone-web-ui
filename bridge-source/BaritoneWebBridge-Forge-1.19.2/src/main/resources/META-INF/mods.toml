@@ -1,0 +1,27 @@
+modLoader="javafml"
+loaderVersion="[43,)"
+license="All Rights Reserved"
+
+[[mods]]
+modId="baritonewebbridge"
+version="2.5.2"
+displayName="Baritone Web Bridge"
+displayTest="IGNORE_ALL_VERSION"
+description='''
+Local HTTP bridge for controlling Baritone and reading/manipulating the client inventory.
+Forge port for Minecraft 1.19.2.
+'''
+
+[[dependencies.baritonewebbridge]]
+modId="forge"
+mandatory=true
+versionRange="[43,)"
+ordering="NONE"
+side="CLIENT"
+
+[[dependencies.baritonewebbridge]]
+modId="minecraft"
+mandatory=true
+versionRange="[1.19.2]"
+ordering="NONE"
+side="CLIENT"
