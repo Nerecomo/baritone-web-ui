@@ -211,9 +211,11 @@ public final class BaritoneWebBridge {
         boolean baritone = isBaritoneAvailable();
         boolean inGame = player != null && Mc.level() != null;
         String playerName = player != null ? Mc.playerName(player) : Mc.sessionUserName();
+        float health = player == null ? -1f : Mc.floatValue(player, new String[]{"m_21223_", "getHealth"});
+        float maxHealth = player == null ? -1f : Mc.floatValue(player, new String[]{"m_21233_", "getMaxHealth"});
         String json = "{\"online\":true,\"baritone\":" + baritone + ",\"inGame\":" + inGame
                 + ",\"pending\":" + COMMAND_PENDING.get() + ",\"version\":\"" + VERSION + "\",\"requestId\":" + requestId
-                + ",\"instanceId\":\"" + INSTANCE_ID + "\",\"port\":" + port + ",\"playerName\":\"" + jsonEscape(playerName) + "\""
+                + ",\"instanceId\":\"" + INSTANCE_ID + "\",\"port\":" + port + ",\"playerName\":\"" + jsonEscape(playerName) + "\",\"health\":" + health + ",\"maxHealth\":" + maxHealth
                 + ",\"lastCommand\":\"" + jsonEscape(lastCommand) + "\",\"lastError\":\"" + jsonEscape(lastError)
                 + "\",\"lastDurationMs\":" + lastDurationMs + ",\"uptimeMs\":" + (System.currentTimeMillis() - STARTED_AT) + "}";
         respond(exchange, 200, json, requestId);
