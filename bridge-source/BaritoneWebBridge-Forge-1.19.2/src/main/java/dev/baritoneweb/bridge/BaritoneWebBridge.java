@@ -62,7 +62,7 @@ import java.awt.image.BufferedImage;
 @Mod(BaritoneWebBridge.MOD_ID)
 public final class BaritoneWebBridge {
     public static final String MOD_ID = "baritonewebbridge";
-    private static final String VERSION = "2.5.2";
+    private static final String VERSION = "2.5.6";
     private static final int FIRST_PORT = 8765;
     private static final int LAST_PORT = 8795;
     private static final int MAX_BODY_BYTES = 16 * 1024;
@@ -90,6 +90,7 @@ public final class BaritoneWebBridge {
     private List<Path> modJarPaths = List.of();
     private String iconAssetFingerprint = "";
     private Path iconDiskCacheDir;
+    private Path catalogCacheFile;
     private final Map<String, Optional<byte[]>> itemIconCache = new ConcurrentHashMap<>();
     private final Map<String, byte[]> renderedIconCache = Collections.synchronizedMap(new LinkedHashMap<>(256, 0.75f, true) {
         @Override protected boolean removeEldestEntry(Map.Entry<String, byte[]> eldest) { return size() > 512; }
@@ -106,8 +107,10 @@ public final class BaritoneWebBridge {
     private HttpServer server;
     private int port = -1;
     private ExecutorService commandExecutor;
+    private ExecutorService iconPrewarmExecutor;
     private ScheduledExecutorService quotaExecutor;
     private volatile QuotaSession quotaSession;
+    private final AtomicBoolean iconPrewarmStarted = new AtomicBoolean();
 
     public BaritoneWebBridge() {
         // Forge loads one-sided mods on both physical sides; on a dedicated server this bridge must do nothing.
@@ -119,6 +122,7 @@ public final class BaritoneWebBridge {
         iconAssetFingerprint = computeAssetFingerprint(gameDir, modJarPaths);
         iconDiskCacheDir = gameDir.resolve("cache").resolve("baritone-web-bridge").resolve("item-icons")
                 .resolve(iconAssetFingerprint.substring(0, 16));
+        catalogCacheFile = gameDir.resolve("cache").resolve("baritone-web-bridge").resolve("catalog-" + iconAssetFingerprint.substring(0, 16) + ".json");
         try { Files.createDirectories(iconDiskCacheDir); }
         catch (IOException error) { DebugLog.error("ITEM-ICON", "Could not create rendered icon cache directory", error); }
         DebugLog.info("ITEM-ICON", "Rendered icon cache=" + iconDiskCacheDir + ", fingerprint=" + iconAssetFingerprint.substring(0, 16));
@@ -133,6 +137,7 @@ public final class BaritoneWebBridge {
             server.createContext("/api/inventory", this::handleInventory);
             server.createContext("/api/inventory/action", this::handleInventoryAction);
             server.createContext("/api/item-icon", this::handleItemIcon);
+            server.createContext("/api/catalog", this::handleCatalog);
             server.createContext("/api/cache", this::handleCache);
             server.createContext("/api/cache/open", this::handleCacheOpen);
             server.createContext("/api/cache/clear", this::handleCacheClear);
@@ -148,6 +153,11 @@ public final class BaritoneWebBridge {
                 Thread thread = new Thread(runnable, "baritone-web-command");
                 thread.setDaemon(true);
                 thread.setUncaughtExceptionHandler((ignored, error) -> DebugLog.error("COMMAND", "Uncaught command worker error", error));
+                return thread;
+            });
+            iconPrewarmExecutor = Executors.newSingleThreadExecutor(runnable -> {
+                Thread thread = new Thread(runnable, "baritone-web-icon-prewarm");
+                thread.setDaemon(true);
                 return thread;
             });
             quotaExecutor = Executors.newSingleThreadScheduledExecutor(runnable -> {
@@ -189,6 +199,7 @@ public final class BaritoneWebBridge {
         DebugLog.info("STOP", "Stopping bridge");
         if (server != null) server.stop(0);
         if (commandExecutor != null) commandExecutor.shutdownNow();
+        if (iconPrewarmExecutor != null) iconPrewarmExecutor.shutdownNow();
         if (quotaExecutor != null) quotaExecutor.shutdownNow();
         DebugLog.stop();
     }
@@ -200,9 +211,11 @@ public final class BaritoneWebBridge {
         boolean baritone = isBaritoneAvailable();
         boolean inGame = player != null && Mc.level() != null;
         String playerName = player != null ? Mc.playerName(player) : Mc.sessionUserName();
+        float health = player == null ? -1f : Mc.floatValue(player, new String[]{"m_21223_", "getHealth"});
+        float maxHealth = player == null ? -1f : Mc.floatValue(player, new String[]{"m_21233_", "getMaxHealth"});
         String json = "{\"online\":true,\"baritone\":" + baritone + ",\"inGame\":" + inGame
                 + ",\"pending\":" + COMMAND_PENDING.get() + ",\"version\":\"" + VERSION + "\",\"requestId\":" + requestId
-                + ",\"instanceId\":\"" + INSTANCE_ID + "\",\"port\":" + port + ",\"playerName\":\"" + jsonEscape(playerName) + "\""
+                + ",\"instanceId\":\"" + INSTANCE_ID + "\",\"port\":" + port + ",\"playerName\":\"" + jsonEscape(playerName) + "\",\"health\":" + health + ",\"maxHealth\":" + maxHealth
                 + ",\"lastCommand\":\"" + jsonEscape(lastCommand) + "\",\"lastError\":\"" + jsonEscape(lastError)
                 + "\",\"lastDurationMs\":" + lastDurationMs + ",\"uptimeMs\":" + (System.currentTimeMillis() - STARTED_AT) + "}";
         respond(exchange, 200, json, requestId);
@@ -251,6 +264,12 @@ public final class BaritoneWebBridge {
             try { png = renderedIcon(iconKey, itemId, requestId); }
             catch (Throwable error) { DebugLog.error(requestId, "ITEM-RENDER", "Rendered icon failed for " + iconKey, error); }
         }
+        if (png == null && itemId != null && !itemId.isBlank()) {
+            try {
+                Object stack = Mc.stackForItemId(itemId);
+                if (stack != null && !Mc.itemStackEmpty(stack)) png = renderedIcon(registerIconStack(stack, itemId), itemId, requestId);
+            } catch (Throwable error) { DebugLog.error(requestId, "ITEM-RENDER", "Direct item render failed for " + itemId, error); }
+        }
         if (png == null && itemId != null && !itemId.isBlank()) png = resourceIcon(itemId, requestId);
         if (png == null) {
             fail(exchange, 404, "No icon could be rendered" + (itemId == null ? "" : " for " + itemId), requestId);
@@ -264,6 +283,78 @@ public final class BaritoneWebBridge {
         if (!prepare(exchange, "GET", requestId)) return;
         respond(exchange, 200, "{\"ok\":true,\"path\":\"" + jsonEscape(iconDiskCacheDir.toAbsolutePath().toString())
                 + "\",\"bytes\":" + cacheSize(iconDiskCacheDir) + "}", requestId);
+    }
+
+    private void handleCatalog(HttpExchange exchange) throws IOException {
+        long requestId = REQUEST_SEQUENCE.incrementAndGet();
+        if (!prepare(exchange, "GET", requestId)) return;
+        try {
+            String json;
+            if (Files.isRegularFile(catalogCacheFile)) json = Files.readString(catalogCacheFile, StandardCharsets.UTF_8);
+            else {
+                json = buildCatalogJson();
+                Files.createDirectories(catalogCacheFile.getParent());
+                Files.writeString(catalogCacheFile, json, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            }
+            respond(exchange, 200, json, requestId);
+            startIconPrewarm();
+        } catch (Throwable error) { fail(exchange, 503, "Could not build registry catalog: " + rootMessage(error), requestId); }
+    }
+
+    private void startIconPrewarm() {
+        if (iconPrewarmExecutor == null || !iconPrewarmStarted.compareAndSet(false, true)) return;
+        iconPrewarmExecutor.execute(() -> {
+            int rendered = 0, cached = 0, failed = 0;
+            try {
+                Class<?> registries = Class.forName("net.minecraftforge.registries.ForgeRegistries");
+                Object items = registries.getField("ITEMS").get(null);
+                Method getKeys = Class.forName("net.minecraftforge.registries.IForgeRegistry").getMethod("getKeys");
+                @SuppressWarnings("unchecked") Set<Object> keys = (Set<Object>) getKeys.invoke(items);
+                List<String> ids = keys.stream().map(String::valueOf).sorted().toList();
+                DebugLog.info("ITEM-PREWARM", "Starting background cache for " + ids.size() + " registered items");
+                for (String id : ids) {
+                    if (Thread.currentThread().isInterrupted()) break;
+                    try {
+                        Object stack = Mc.stackForItemId(id);
+                        if (stack == null || Mc.itemStackEmpty(stack)) { failed++; continue; }
+                        String key = registerIconStack(stack, id);
+                        Path existing = iconDiskCacheDir.resolve(key + ".png");
+                        if (Files.isRegularFile(existing) && Files.size(existing) > 32) { cached++; continue; }
+                        renderedIcon(key, id, 0);
+                        rendered++;
+                        Thread.sleep(12L);
+                    } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); break; }
+                    catch (Throwable ignored) { failed++; }
+                }
+                DebugLog.info("ITEM-PREWARM", "Background cache finished: existing=" + cached + ", rendered=" + rendered + ", skipped=" + failed);
+            } catch (Throwable error) { DebugLog.error("ITEM-PREWARM", "Background cache failed", error); }
+        });
+    }
+
+    private String buildCatalogJson() throws Exception {
+        Class<?> registries = Class.forName("net.minecraftforge.registries.ForgeRegistries");
+        Object blocks = registries.getField("BLOCKS").get(null);
+        Object items = registries.getField("ITEMS").get(null);
+        Method getKeys = Class.forName("net.minecraftforge.registries.IForgeRegistry").getMethod("getKeys");
+        @SuppressWarnings("unchecked") Set<Object> blockKeys = (Set<Object>) getKeys.invoke(blocks);
+        @SuppressWarnings("unchecked") Set<Object> itemKeys = (Set<Object>) getKeys.invoke(items);
+        List<String> blockIds = blockKeys.stream().map(String::valueOf).sorted().toList();
+        Set<String> blockSet = Set.copyOf(blockIds);
+        List<String> itemIds = itemKeys.stream().map(String::valueOf).filter(id -> !blockSet.contains(id)).sorted().toList();
+        return "{\"ok\":true,\"fingerprint\":\"" + iconAssetFingerprint.substring(0, 16) + "\",\"blocks\":["
+                + blockIds.stream().map(this::catalogEntryJson).collect(java.util.stream.Collectors.joining(","))
+                + "],\"items\":[" + itemIds.stream().map(this::catalogEntryJson).collect(java.util.stream.Collectors.joining(",")) + "]}";
+    }
+
+    private String catalogEntryJson(String id) {
+        String name = id;
+        try { Object stack = Mc.stackForItemId(id); if (stack != null) name = Mc.itemName(stack); }
+        catch (Throwable ignored) { }
+        if (name.isBlank() || name.startsWith("block.") || name.startsWith("item.") || name.equals(id)) {
+            String path = id.substring(id.indexOf(':') + 1).replace('_', ' ').replace('/', ' ');
+            name = Character.toUpperCase(path.charAt(0)) + path.substring(1);
+        }
+        return "{\"id\":\"" + jsonEscape(id) + "\",\"name\":\"" + jsonEscape(name) + "\"}";
     }
 
     private void handleCacheOpen(HttpExchange exchange) throws IOException {
@@ -1332,6 +1423,16 @@ public final class BaritoneWebBridge {
             }
         }
 
+        static Object stackForItemId(String itemId) {
+            try {
+                Object item = itemById(itemId);
+                if (item == null) return null;
+                Class<?> itemLike = Class.forName("net.minecraft.world.level.ItemLike");
+                Class<?> stackClass = Class.forName("net.minecraft.world.item.ItemStack");
+                return stackClass.getConstructor(itemLike).newInstance(item);
+            } catch (Throwable ignored) { return null; }
+        }
+
         static Object gameMode() {
             Object mc = minecraft();
             return mc == null ? null : fieldOrNull(mc, "f_91072_", "gameMode");
@@ -1846,7 +1947,25 @@ public final class BaritoneWebBridge {
             if (component == null) return "";
             Object value = invokeNoArgsOrNull(component, "getString");
             if (value == null) value = invokeNoArgsOrNull(component, "m_130086_");
-            return value == null ? component.toString() : String.valueOf(value);
+            String text = value == null ? component.toString() : String.valueOf(value);
+            if (text.startsWith("block.") || text.startsWith("item.")) {
+                try {
+                    Class<?> i18n = Class.forName("net.minecraft.client.resources.language.I18n");
+                    for (String methodName : new String[]{"get", "m_118938_"}) {
+                        try {
+                            Object translated = i18n.getMethod(methodName, String.class, Object[].class).invoke(null, text, new Object[0]);
+                            if (translated != null && !String.valueOf(translated).equals(text)) return String.valueOf(translated);
+                        } catch (NoSuchMethodException ignored) { }
+                    }
+                } catch (Throwable ignored) { }
+                try {
+                    Class<?> language = Class.forName("net.minecraft.locale.Language");
+                    Object instance = language.getMethod("getInstance").invoke(null);
+                    Object translated = language.getMethod("getOrDefault", String.class, String.class).invoke(instance, text, text);
+                    if (translated != null && !String.valueOf(translated).equals(text)) return String.valueOf(translated);
+                } catch (Throwable ignored) { }
+            }
+            return text;
         }
 
         static String itemId(Object stack) {
