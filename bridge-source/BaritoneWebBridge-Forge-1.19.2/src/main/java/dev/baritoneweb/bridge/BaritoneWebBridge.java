@@ -1958,6 +1958,12 @@ public final class BaritoneWebBridge {
                         } catch (NoSuchMethodException ignored) { }
                     }
                 } catch (Throwable ignored) { }
+                try {
+                    Class<?> language = Class.forName("net.minecraft.locale.Language");
+                    Object instance = language.getMethod("getInstance").invoke(null);
+                    Object translated = language.getMethod("getOrDefault", String.class, String.class).invoke(instance, text, text);
+                    if (translated != null && !String.valueOf(translated).equals(text)) return String.valueOf(translated);
+                } catch (Throwable ignored) { }
             }
             return text;
         }
