@@ -1,4 +1,4 @@
-# Baritone Web UI + Forge Bridge 2.5.4
+# Baritone Web UI + Forge Bridge 2.5.5
 
 Локальный веб-интерфейс для управления Baritone и просмотра инвентаря Minecraft через Forge Bridge.
 
@@ -6,8 +6,8 @@
 
 - `site/` — универсальный сайт без текстур, каталогов и иконок конкретной версии Minecraft.
 - `bridge-source/` — исходный Forge-проект Bridge.
-- `BaritoneWebBridge-Forge-1.19.2-2.5.4.jar` — готовый мод для Forge 1.19.2.
-- `BaritoneWebBridge-Forge-1.19.2-2.5.4-sources.zip` — архив исходников.
+- `BaritoneWebBridge-Forge-1.19.2-2.5.5.jar` — готовый мод для Forge 1.19.2.
+- `BaritoneWebBridge-Forge-1.19.2-2.5.5-sources.zip` — архив исходников.
 
 ## Сеть и порты
 

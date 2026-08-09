@@ -62,7 +62,7 @@ import java.awt.image.BufferedImage;
 @Mod(BaritoneWebBridge.MOD_ID)
 public final class BaritoneWebBridge {
     public static final String MOD_ID = "baritonewebbridge";
-    private static final String VERSION = "2.5.4";
+    private static final String VERSION = "2.5.5";
     private static final int FIRST_PORT = 8765;
     private static final int LAST_PORT = 8795;
     private static final int MAX_BODY_BYTES = 16 * 1024;
@@ -262,6 +262,12 @@ public final class BaritoneWebBridge {
             try { png = renderedIcon(iconKey, itemId, requestId); }
             catch (Throwable error) { DebugLog.error(requestId, "ITEM-RENDER", "Rendered icon failed for " + iconKey, error); }
         }
+        if (png == null && itemId != null && !itemId.isBlank()) {
+            try {
+                Object stack = Mc.stackForItemId(itemId);
+                if (stack != null && !Mc.itemStackEmpty(stack)) png = renderedIcon(registerIconStack(stack, itemId), itemId, requestId);
+            } catch (Throwable error) { DebugLog.error(requestId, "ITEM-RENDER", "Direct item render failed for " + itemId, error); }
+        }
         if (png == null && itemId != null && !itemId.isBlank()) png = resourceIcon(itemId, requestId);
         if (png == null) {
             fail(exchange, 404, "No icon could be rendered" + (itemId == null ? "" : " for " + itemId), requestId);
@@ -332,8 +338,15 @@ public final class BaritoneWebBridge {
         Set<String> blockSet = Set.copyOf(blockIds);
         List<String> itemIds = itemKeys.stream().map(String::valueOf).filter(id -> !blockSet.contains(id)).sorted().toList();
         return "{\"ok\":true,\"fingerprint\":\"" + iconAssetFingerprint.substring(0, 16) + "\",\"blocks\":["
-                + blockIds.stream().map(id -> "\"" + jsonEscape(id) + "\"").collect(java.util.stream.Collectors.joining(","))
-                + "],\"items\":[" + itemIds.stream().map(id -> "\"" + jsonEscape(id) + "\"").collect(java.util.stream.Collectors.joining(",")) + "]}";
+                + blockIds.stream().map(this::catalogEntryJson).collect(java.util.stream.Collectors.joining(","))
+                + "],\"items\":[" + itemIds.stream().map(this::catalogEntryJson).collect(java.util.stream.Collectors.joining(",")) + "]}";
+    }
+
+    private String catalogEntryJson(String id) {
+        String name = id;
+        try { Object stack = Mc.stackForItemId(id); if (stack != null) name = Mc.itemName(stack); }
+        catch (Throwable ignored) { }
+        return "{\"id\":\"" + jsonEscape(id) + "\",\"name\":\"" + jsonEscape(name) + "\"}";
     }
 
     private void handleCacheOpen(HttpExchange exchange) throws IOException {
