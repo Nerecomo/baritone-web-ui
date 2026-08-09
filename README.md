@@ -1,4 +1,4 @@
-# Baritone Web UI + Forge Bridge 2.5.6
+# Baritone Web UI + Forge Bridge 2.5.6 (скрины снизу)
 
 ## Кратко о проекте
 
