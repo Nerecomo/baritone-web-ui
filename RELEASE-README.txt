@@ -1,14 +1,14 @@
-Global release 2.5.5
+Global release 2.5.6
 
 site\
   Универсальный статический сайт без каталогов и текстур конкретной версии Minecraft.
 
-BaritoneWebBridge-Forge-1.19.2-2.5.5.jar
+BaritoneWebBridge-Forge-1.19.2-2.5.6.jar
   Готовый Forge-мод для Minecraft 1.19.2.
 
-BaritoneWebBridge-Forge-1.19.2-2.5.5-sources.zip
+BaritoneWebBridge-Forge-1.19.2-2.5.6-sources.zip
 bridge-source\
-  Синхронизированные исходники Bridge 2.5.5.
+  Синхронизированные исходники Bridge 2.5.6.
 
 При первом подключении Bridge сканирует Forge-реестры текущей модовой сборки,
 сохраняет catalog JSON в кеш и передаёт сайту список доступных блоков.

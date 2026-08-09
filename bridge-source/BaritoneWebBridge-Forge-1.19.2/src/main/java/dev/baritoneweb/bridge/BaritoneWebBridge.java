@@ -62,7 +62,7 @@ import java.awt.image.BufferedImage;
 @Mod(BaritoneWebBridge.MOD_ID)
 public final class BaritoneWebBridge {
     public static final String MOD_ID = "baritonewebbridge";
-    private static final String VERSION = "2.5.5";
+    private static final String VERSION = "2.5.6";
     private static final int FIRST_PORT = 8765;
     private static final int LAST_PORT = 8795;
     private static final int MAX_BODY_BYTES = 16 * 1024;
@@ -302,7 +302,7 @@ public final class BaritoneWebBridge {
     private void startIconPrewarm() {
         if (iconPrewarmExecutor == null || !iconPrewarmStarted.compareAndSet(false, true)) return;
         iconPrewarmExecutor.execute(() -> {
-            int rendered = 0, failed = 0;
+            int rendered = 0, cached = 0, failed = 0;
             try {
                 Class<?> registries = Class.forName("net.minecraftforge.registries.ForgeRegistries");
                 Object items = registries.getField("ITEMS").get(null);
@@ -316,13 +316,15 @@ public final class BaritoneWebBridge {
                         Object stack = Mc.stackForItemId(id);
                         if (stack == null || Mc.itemStackEmpty(stack)) { failed++; continue; }
                         String key = registerIconStack(stack, id);
+                        Path existing = iconDiskCacheDir.resolve(key + ".png");
+                        if (Files.isRegularFile(existing) && Files.size(existing) > 32) { cached++; continue; }
                         renderedIcon(key, id, 0);
                         rendered++;
                         Thread.sleep(12L);
                     } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); break; }
                     catch (Throwable ignored) { failed++; }
                 }
-                DebugLog.info("ITEM-PREWARM", "Background cache finished: rendered=" + rendered + ", skipped=" + failed);
+                DebugLog.info("ITEM-PREWARM", "Background cache finished: existing=" + cached + ", rendered=" + rendered + ", skipped=" + failed);
             } catch (Throwable error) { DebugLog.error("ITEM-PREWARM", "Background cache failed", error); }
         });
     }
@@ -346,6 +348,10 @@ public final class BaritoneWebBridge {
         String name = id;
         try { Object stack = Mc.stackForItemId(id); if (stack != null) name = Mc.itemName(stack); }
         catch (Throwable ignored) { }
+        if (name.isBlank() || name.startsWith("block.") || name.startsWith("item.") || name.equals(id)) {
+            String path = id.substring(id.indexOf(':') + 1).replace('_', ' ').replace('/', ' ');
+            name = Character.toUpperCase(path.charAt(0)) + path.substring(1);
+        }
         return "{\"id\":\"" + jsonEscape(id) + "\",\"name\":\"" + jsonEscape(name) + "\"}";
     }
 
@@ -1939,7 +1945,19 @@ public final class BaritoneWebBridge {
             if (component == null) return "";
             Object value = invokeNoArgsOrNull(component, "getString");
             if (value == null) value = invokeNoArgsOrNull(component, "m_130086_");
-            return value == null ? component.toString() : String.valueOf(value);
+            String text = value == null ? component.toString() : String.valueOf(value);
+            if (text.startsWith("block.") || text.startsWith("item.")) {
+                try {
+                    Class<?> i18n = Class.forName("net.minecraft.client.resources.language.I18n");
+                    for (String methodName : new String[]{"get", "m_118938_"}) {
+                        try {
+                            Object translated = i18n.getMethod(methodName, String.class, Object[].class).invoke(null, text, new Object[0]);
+                            if (translated != null && !String.valueOf(translated).equals(text)) return String.valueOf(translated);
+                        } catch (NoSuchMethodException ignored) { }
+                    }
+                } catch (Throwable ignored) { }
+            }
+            return text;
         }
 
         static String itemId(Object stack) {
