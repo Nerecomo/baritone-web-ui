@@ -627,7 +627,6 @@ body.site-customized button,body.site-customized input,body.site-customized sele
   background:#9cff4a!important;
   box-shadow:0 0 10px #9cff4a,0 0 0 4px #24331d!important;
 }
-body.site-hide-crafting .inventory-container{display:none!important}
 
 /* Bridge cache controls */
 .cache-tools{display:grid;grid-template-columns:minmax(0,1fr) 28px;align-items:center;gap:4px}.cache-folder-button{width:100%}.cache-help{position:relative;display:grid;place-items:center;width:24px;height:24px;border:1px solid var(--line);border-radius:50%;color:var(--muted);font-weight:800;cursor:help}.cache-help-popup{position:absolute;z-index:100;left:calc(100% + 10px);bottom:0;width:300px;padding:12px 14px;border:1px solid var(--line-strong);border-radius:10px;background:#111619;color:var(--text);font-size:12px;font-weight:400;line-height:1.5;box-shadow:0 14px 40px #000a;opacity:0;visibility:hidden;transform:translateX(-4px);transition:.15s}.cache-help:hover .cache-help-popup,.cache-help:focus .cache-help-popup{opacity:1;visibility:visible;transform:none}
