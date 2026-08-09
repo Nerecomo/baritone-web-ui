@@ -43,7 +43,7 @@
 
 ![6](media/browser_v6St558gFT.png)
 
-инвентарь в live режиме [броня, хп, еда]
+инвентарь в live режиме [броня, хп, еда, полоска опыта с уровнем]
 
 ![5](media/browser_rnCDMliyzq.png)
 
