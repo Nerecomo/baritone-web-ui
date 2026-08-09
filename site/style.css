@@ -619,6 +619,7 @@ body.site-customized button,body.site-customized input,body.site-customized sele
 .inventory-window .player-hud .hud-stat b{font-size:10px}.inventory-window .player-hud .hud-stat i{width:12px;font-size:15px}.inventory-window .player-hud .hud-stat>span{gap:2px}
 .experience-bar>b{font-size:12px}.hide-inventory-labels .inventory-main-grid .inventory-slot>small{display:none}.hide-hotbar-labels .inventory-hotbar-grid .inventory-slot>small{display:none}.hide-armor-labels .inventory-armor-grid .inventory-slot>small,.hide-armor-labels .inventory-offhand .inventory-slot>small{display:none}.hide-container-labels .inventory-container .inventory-slot>small{display:none}
 #toast{top:50%;right:24px;bottom:auto;transform:translateY(-50%) translateX(120%);font-size:10px!important;padding:10px 14px!important;max-width:min(187px,calc(100vw - 48px));z-index:1100}#toast.show{transform:translateY(-50%) translateX(0)}.alarm-dismiss{padding:36px 72px;font-size:33px;border-width:3px;right:24px;top:50%;transform:translateY(-50%)}
+body:has(.alarm-dismiss:not([hidden])) #toast{top:calc(50% + 88px);transform:translateX(120%)}body:has(.alarm-dismiss:not([hidden])) #toast.show{transform:translateX(0)}.selected-block-icon{width:34px;height:34px;flex:0 0 34px;object-fit:contain;image-rendering:pixelated;filter:drop-shadow(0 2px 2px #0008)}
 
 .block-card .block-icon.catalog-sprite-icon{width:48px;height:48px}
 .selected-block-icon.catalog-sprite-icon{width:48px;height:48px;flex-basis:48px}

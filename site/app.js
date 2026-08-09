@@ -28,7 +28,7 @@ const nav=$('#commandNav');
 
 function current(){return commands.find(command=>command.id===state.active)}
 function selected(){return state.selectedByCommand[state.active]||new Set()}
-function blockIcon(){return ''}
+function blockIcon(id,className='selected-block-icon'){const apiUrl=activeInstance()?.apiUrl||state.apiUrl.replace(/\/$/,'');return itemIcon(id,className,apiUrl)}
 function itemIcon(id,className='inventory-item-icon',apiUrl='',iconKey=''){const base=apiUrl?apiUrl.replace(/\/$/,''):'';const bridgeSrc=id&&base?(iconKey?`${base}/item-icon?key=${encodeURIComponent(iconKey)}&id=${encodeURIComponent(id)}`:`${base}/item-icon?id=${encodeURIComponent(id)}`):'';if(bridgeSrc)return `<img class="${className}" src="${bridgeSrc}" alt="" loading="lazy" decoding="async" onerror="this.style.display='none'">`;return ''}
 function activeInstance(){return state.instances.get(state.activeInstanceId)||null}
 function commandApiUrl(){return activeInstance()?.apiUrl||state.apiUrl.replace(/\/$/,'')}
